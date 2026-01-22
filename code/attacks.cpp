@@ -8,7 +8,7 @@ using namespace std;
 
 //for testing 
 bool verify_hmac(const RawMessage&, const vector<unsigned char>&) {
-    return true; //always accepted unless testing for false MAC
+    return true; 
 }
 
 vector<unsigned char> decrypt_and_unpad(const RawMessage&,const vector<unsigned char>&) {
@@ -16,15 +16,15 @@ vector<unsigned char> decrypt_and_unpad(const RawMessage&,const vector<unsigned 
 }
 
 void ratchet_keys(Session&, const RawMessage&, const vector<unsigned char>&) {
-    // no-op for FSM tests
+    
 }
 
 RawMessage make_valid_client_data(unsigned int round) {
     RawMessage msg{};
-    msg.opcode = Opcode::CLIENT_DATA;
+    msg.opcode = CLIENT_DATA;
     msg.client_id = 1;
     msg.round = round;
-    msg.direction = Direction::C2S;
+    msg.direction = C2S;
     msg.iv = {0x01};
     msg.ciphertext = {0x02};
     msg.hmac = {0x03};
@@ -35,27 +35,27 @@ void attack_replay() {
     cout << "[*] Replay attack" << endl;
 
     Session s = init_session(1, {0xAA});
-    s.phase = Phase::ACTIVE;
+    s.phase = ACTIVE;
 
     RawMessage msg = make_valid_client_data(0);
 
-    assert(process_incoming(s, msg) == ProcessResult::ACCEPTED);
+    assert(process_incoming(s, msg) == ACCEPTED);
     assert(s.expected_round == 1);
 
-    assert(process_incoming(s, msg) == ProcessResult::TERMINATED);
-    assert(s.phase == Phase::TERMINATED);
+    assert(process_incoming(s, msg) == REJECTED);
+    assert(s.phase == TERMINATED);
 }
 
 void attack_reflection() {
     cout << "[*] Reflection attack" << endl;
 
     Session s = init_session(1, {0xAA});
-    s.phase = Phase::ACTIVE;
+    s.phase = ACTIVE;
 
     RawMessage msg = make_valid_client_data(0);
-    msg.direction = Direction::S2C;
+    msg.direction = S2C;
 
-    assert(process_incoming(s, msg) == ProcessResult::TERMINATED);
+    assert(process_incoming(s, msg) == REJECTED);
 }
 
 void attack_wrong_phase() {
@@ -66,43 +66,43 @@ void attack_wrong_phase() {
 
     RawMessage msg = make_valid_client_data(0);
 
-    assert(process_incoming(s, msg) == ProcessResult::TERMINATED);
+    assert(process_incoming(s, msg) == REJECTED);
 }
 
 void attack_round_skip() {
     cout << "[*] Round skip attack" << endl;
 
     Session s = init_session(1, {0xAA});
-    s.phase = Phase::ACTIVE;
+    s.phase = ACTIVE;
 
-    RawMessage msg = make_valid_client_data(5); // jump ahead
+    RawMessage msg = make_valid_client_data(5); 
 
-    assert(process_incoming(s, msg) == ProcessResult::TERMINATED);
+    assert(process_incoming(s, msg) == REJECTED);
 }
 
 void attack_opcode_misuse() {
     cout << "[*] Opcode misuse attack" << endl;
 
     Session s = init_session(1, {0xAA});
-    s.phase = Phase::ACTIVE;
+    s.phase = ACTIVE;
 
     RawMessage msg = make_valid_client_data(0);
-    msg.opcode = Opcode::CLIENT_HELLO; // invalid in ACTIVE
+    msg.opcode = CLIENT_HELLO; 
 
-    assert(process_incoming(s, msg) == ProcessResult::TERMINATED);
+    assert(process_incoming(s, msg) == REJECTED);
 }
 
 void attack_terminate() {
     cout << "[*] Terminate opcode attack" << endl;
 
     Session s = init_session(1, {0xAA});
-    s.phase = Phase::ACTIVE;
+    s.phase = ACTIVE;
 
     RawMessage msg = make_valid_client_data(0);
-    msg.opcode = Opcode::TERMINATE;
+    msg.opcode = TERMINATE;
 
-    assert(process_incoming(s, msg) == ProcessResult::TERMINATED);
-    assert(s.phase == Phase::TERMINATED);
+    assert(process_incoming(s, msg) == REJECTED);
+    assert(s.phase == TERMINATED);
 }
 
 int main() {

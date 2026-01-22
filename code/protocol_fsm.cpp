@@ -5,25 +5,19 @@
 
 using namespace std;
 
-// Verifies HMAC over (header || ciphertext)
 bool verify_hmac(const RawMessage& msg, const vector<unsigned char>& mac_key);
-
-// Decrypts ciphertext using AES-CBC and performs PKCS#7 unpadding.
-// Throws on ANY failure.
 vector<unsigned char> decrypt_and_unpad(const RawMessage& msg, const vector<unsigned char>& enc_key);
-
-// Evolves session keys after successful message processing
 void ratchet_keys(Session& session, RawMessage& msg, const vector<unsigned char>& plaintext);
 
 static bool opcode_allowed(Phase phase, Opcode opcode) {
     switch (phase) {
-        case Phase::INIT:
-            return opcode == Opcode::CLIENT_HELLO || opcode == Opcode::SERVER_CHALLENGE;
+        case INIT:
+            return opcode == CLIENT_HELLO || opcode == SERVER_CHALLENGE;
 
-        case Phase::ACTIVE:
-            return opcode == Opcode::CLIENT_DATA || opcode == Opcode::SERVER_AGGR_RESPONSE || opcode == Opcode::TERMINATE;
+        case ACTIVE:
+            return opcode == CLIENT_DATA || opcode == SERVER_AGGR_RESPONSE || opcode == TERMINATE;
 
-        case Phase::TERMINATED:
+        case TERMINATED:
             return false;
     }
     return false;
@@ -31,26 +25,26 @@ static bool opcode_allowed(Phase phase, Opcode opcode) {
 
 static bool direction_allowed(Opcode opcode, Direction dir) {
     switch (opcode) {
-        case Opcode::CLIENT_HELLO:
-            return dir == Direction::C2S;
+        case CLIENT_HELLO:
+            return dir == C2S;
 
-        case Opcode::CLIENT_DATA:
-            return dir == Direction::C2S;
+        case CLIENT_DATA:
+            return dir == C2S;
 
-        case Opcode::SERVER_CHALLENGE:
-            return dir == Direction::S2C;
+        case SERVER_CHALLENGE:
+            return dir == S2C;
 
-        case Opcode::SERVER_AGGR_RESPONSE:
-            return dir == Direction::S2C;
+        case SERVER_AGGR_RESPONSE:
+            return dir == S2C;
 
-        case Opcode::TERMINATE:
+        case TERMINATE:
             return true;
     }
     return false;
 }
 
 static void terminate(Session& session) {
-    session.phase = Phase::TERMINATED;
+    session.phase = TERMINATED;
 
     session.c2s_enc.clear();
     session.c2s_mac.clear();
@@ -61,7 +55,7 @@ static void terminate(Session& session) {
 Session init_session(unsigned char client_id, vector<unsigned char>& master_key) {
     Session s{};
 
-    s.phase = Phase::INIT;
+    s.phase = INIT;
     s.expected_round = 0;
 
     // Placeholder: real derivation done in crypto_utils
@@ -74,58 +68,58 @@ Session init_session(unsigned char client_id, vector<unsigned char>& master_key)
 }
 
 ProcessResult process_incoming(Session& session, RawMessage& msg) {
-    if (session.phase == Phase::TERMINATED) {
-        return ProcessResult::TERMINATED;
+    if (session.phase == TERMINATED) {
+        return REJECTED;
     }
 
     if (!opcode_allowed(session.phase, msg.opcode)) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
     if (!direction_allowed(msg.opcode, msg.direction)) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
     if (msg.round != session.expected_round) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
-    vector<unsigned char>& mac_key = (msg.direction == Direction::C2S) ? session.c2s_mac : session.s2c_mac;
+    vector<unsigned char>& mac_key = (msg.direction == C2S) ? session.c2s_mac : session.s2c_mac;
 
     if (!verify_hmac(msg, mac_key)) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
-    vector<unsigned char>& enc_key = (msg.direction == Direction::C2S) ? session.c2s_enc : session.s2c_enc;
+    vector<unsigned char>& enc_key = (msg.direction == C2S) ? session.c2s_enc : session.s2c_enc;
     vector<unsigned char> plaintext;
 
     try {
         plaintext = decrypt_and_unpad(msg, enc_key);
     } catch (...) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
     if (plaintext.empty()) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
     ratchet_keys(session, msg, plaintext);
     session.expected_round++;
 
-    if (session.phase == Phase::INIT) {
-        session.phase = Phase::ACTIVE;
+    if (session.phase == INIT) {
+        session.phase = ACTIVE;
     }
 
-    if (msg.opcode == Opcode::TERMINATE) {
+    if (msg.opcode == TERMINATE) {
         terminate(session);
-        return ProcessResult::TERMINATED;
+        return REJECTED;
     }
 
-    return ProcessResult::ACCEPTED;
+    return ACCEPTED;
 }

@@ -1,29 +1,28 @@
 #ifndef PROTOCOL_FSM_H
 #define PROTOCOL_FSM_H
 
-#include <cstdint>
 #include <vector>
-#include <stdexcept>
+#include <cstdint>
 
 using namespace std;
 
-enum class Phase {
+enum Phase {
     INIT,
     ACTIVE,
     TERMINATED
 };
 
-enum class Direction : unsigned char {
+enum Direction {
     C2S = 0,
     S2C = 1
 };
 
-enum class Opcode : unsigned char {
+enum Opcode {
     CLIENT_HELLO = 10,
     SERVER_CHALLENGE = 20,
     CLIENT_DATA = 30,
     SERVER_AGGR_RESPONSE = 40,
-    TERMINATE = 50
+    TERMINATE = 60
 };
 
 struct RawMessage {
@@ -47,16 +46,12 @@ struct Session {
     vector<unsigned char> s2c_mac;
 };
 
-Session init_session(unsigned char client_id, const vector<unsigned char>& master_key);
-
-enum class ProcessResult {
+enum ProcessResult {
     ACCEPTED,
-    TERMINATED
+    REJECTED
 };
 
-ProcessResult process_incoming(
-    Session& session,
-    RawMessage& msg
-);
+Session init_session(unsigned char client_id, const vector<unsigned char>& master_key);
+ProcessResult process_incoming(Session& session, RawMessage& msg);
 
 #endif
